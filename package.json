@@ -1,0 +1,1 @@
+{"description":"All-or-nothing ETH crowdfunding smart contract with Hardhat tests","devDependencies":{"@nomicfoundation/hardhat-toolbox":"^5.0.0","hardhat":"^2.22.0"},"license":"MIT","name":"token-crowdfunding-dapp","scripts":{"compile":"hardhat compile","node":"hardhat node","test":"hardhat test"},"version":"1.0.0"}
