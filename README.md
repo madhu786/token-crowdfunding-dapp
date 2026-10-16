@@ -1,5 +1,8 @@
 # Token Crowdfunding dApp (Solidity + Hardhat)
 
+[![test](https://github.com/madhu786/token-crowdfunding-dapp/actions/workflows/test.yml/badge.svg)](https://github.com/madhu786/token-crowdfunding-dapp/actions/workflows/test.yml)
+![Solidity](https://img.shields.io/badge/Solidity-0.8.20-363636?logo=solidity) ![Hardhat](https://img.shields.io/badge/Hardhat-2.x-666666?logo=hardhat) ![Ethers.js](https://img.shields.io/badge/Ethers.js-v6-3C3C3D) ![Node.js](https://img.shields.io/badge/Node.js-20-339933?logo=nodedotjs)
+
 A small, self-contained **all-or-nothing crowdfunding smart contract** written in
 Solidity, with a Hardhat test suite. This is a portfolio implementation built to
 demonstrate smart-contract design, state management, and safe ETH handling
@@ -79,12 +82,12 @@ npx hardhat compile
 npx hardhat node
 ```
 
-There is no deploy script by design — deploy `Crowdfunding` from the Hardhat
-console or a one-line ignition/script of your own against the local node:
+To deploy, use `scripts/deploy.js` — locally against the node above, or to
+Sepolia with `--network sepolia` (set `SEPOLIA_RPC_URL` and
+`DEPLOYER_PRIVATE_KEY` first; see `.env.example`):
 
-```js
-const Crowdfunding = await ethers.getContractFactory("Crowdfunding");
-const cf = await Crowdfunding.deploy();
+```bash
+npx hardhat run scripts/deploy.js --network sepolia
 ```
 
 ## Project structure
@@ -95,6 +98,10 @@ token-crowdfunding-dapp/
 │   └── Crowdfunding.sol      # the crowdfunding contract (self-contained)
 ├── test/
 │   └── Crowdfunding.test.js  # create / fund / withdraw / refund cases
+├── scripts/
+│   └── deploy.js             # Hardhat deploy script (local + Sepolia)
+├── frontend/                 # React + Vite demo UI (ethers v6)
+├── .github/workflows/        # CI: hardhat test on push / PR
 ├── hardhat.config.js
 ├── package.json
 └── README.md
@@ -109,3 +116,12 @@ token-crowdfunding-dapp/
 ## License
 
 MIT
+
+## Live demo (Sepolia)
+
+- Contract (Sepolia): TBD
+- Demo: TBD
+
+This demo runs on the Sepolia testnet — deploy the contract with
+`scripts/deploy.js` and run the React app in `frontend/` against that
+deployment (testnet ETH only, no real funds).
