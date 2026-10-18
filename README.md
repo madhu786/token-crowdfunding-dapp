@@ -111,7 +111,9 @@ token-crowdfunding-dapp/
 
 - ERC-20 contributions instead of native ETH
 - Campaign categories and on-chain metadata (IPFS hash)
-- A React + Ethers.js frontend with wallet connect and live campaign states
+- An indexer/subgraph for campaign discovery in the demo UI (the React +
+  Ethers.js frontend in `frontend/` already covers wallet connect and live
+  campaign states)
 
 ## License
 
