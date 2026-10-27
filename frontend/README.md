@@ -2,8 +2,14 @@
 
 A compact React + Vite single-page app that talks to the `Crowdfunding`
 contract (project root, `contracts/Crowdfunding.sol`) with ethers v6 and
-MetaMask. It can connect a wallet, list campaigns (id, title, goal, raised,
-deadline, status), create a campaign, and contribute ETH to a live campaign.
+MetaMask. It covers the full campaign lifecycle: connect a wallet, list
+campaigns (id, title, goal, raised, funding progress, deadline / time
+remaining, status, and your own contribution), create a campaign,
+contribute ETH to a live campaign, withdraw as the creator once an ended
+campaign has met its goal, and claim a refund as a contributor when an
+ended campaign missed its goal. The withdraw / refund buttons only appear
+when the connected account is actually eligible, mirroring the contract's
+own checks.
 
 ## Setup
 
