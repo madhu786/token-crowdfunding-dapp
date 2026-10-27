@@ -10,6 +10,24 @@ import {
 const fmtEth = (wei) => ethers.formatEther(wei);
 const fmtDate = (ts) => new Date(Number(ts) * 1000).toLocaleString();
 
+function progressPct(raised, goal) {
+  if (goal === 0n) return 0;
+  // Basis points first so small contributions still show progress honestly.
+  const pct = Number((raised * 10000n) / goal) / 100;
+  return Math.min(100, pct);
+}
+
+function timeRemaining(deadline) {
+  const seconds = Number(deadline) - Math.floor(Date.now() / 1000);
+  if (seconds <= 0) return "Ended";
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h left`;
+  if (hours > 0) return `${hours}h ${minutes}m left`;
+  return `${minutes}m left`;
+}
+
 export default function App() {
   const [account, setAccount] = useState(null);
   const [contract, setContract] = useState(null);
@@ -25,11 +43,18 @@ export default function App() {
   // Per-campaign contribute amounts, keyed by campaign id
   const [amounts, setAmounts] = useState({});
 
-  const loadCampaigns = useCallback(async (c) => {
+  const loadCampaigns = useCallback(async (c, accountAddress = null) => {
     const count = Number(await c.campaignCount());
     const rows = [];
     for (let i = 0; i < count; i++) {
       const data = await c.campaigns(i);
+      // The connected account's own stake in this campaign — needed to
+      // decide whether a refund can be claimed and to show the user
+      // what they have at risk. Zero when no account is connected.
+      let myContribution = 0n;
+      if (accountAddress) {
+        myContribution = await c.contributions(i, accountAddress);
+      }
       rows.push({
         id: i,
         creator: data.creator,
@@ -38,6 +63,7 @@ export default function App() {
         deadline: data.deadline,
         raised: data.raised,
         withdrawn: data.withdrawn,
+        myContribution,
       });
     }
     setCampaigns(rows);
@@ -54,10 +80,11 @@ export default function App() {
       const network = await provider.getNetwork();
       setWrongNetwork(network.chainId !== SEPOLIA_CHAIN_ID);
       const signer = await provider.getSigner();
-      setAccount(await signer.getAddress());
+      const address = await signer.getAddress();
+      setAccount(address);
       const c = new ethers.Contract(CONTRACT_ADDRESS, CROWDFUNDING_ABI, signer);
       setContract(c);
-      if (!IS_PLACEHOLDER) await loadCampaigns(c);
+      if (!IS_PLACEHOLDER) await loadCampaigns(c, address);
     } catch (err) {
       setStatus(`Connect failed: ${err.shortMessage || err.message}`);
     }
@@ -78,7 +105,7 @@ export default function App() {
       setStatus(`${label} — waiting for confirmation (${tx.hash.slice(0, 10)}…)`);
       await tx.wait();
       setStatus(`${label} — confirmed.`);
-      await loadCampaigns(contract);
+      await loadCampaigns(contract, account);
     } catch (err) {
       setStatus(`${label} failed: ${err.shortMessage || err.message}`);
     } finally {
@@ -98,12 +125,27 @@ export default function App() {
       contract.contribute(id, { value: ethers.parseEther(amounts[id] || "0") })
     );
 
+  const withdraw = (id) =>
+    runTx(`Withdraw from #${id}`, () => contract.withdraw(id));
+
+  const claimRefund = (id) =>
+    runTx(`Claim refund from #${id}`, () => contract.claimRefund(id));
+
   const campaignState = (c) => {
     const ended = BigInt(Math.floor(Date.now() / 1000)) >= c.deadline;
     if (!ended) return "Live";
     if (c.withdrawn) return "Ended — withdrawn";
     return c.raised >= c.goal ? "Ended — goal met" : "Ended — goal missed";
   };
+
+  const isCreator = (c) =>
+    account && c.creator.toLowerCase() === account.toLowerCase();
+
+  const canWithdraw = (c) =>
+    campaignState(c) === "Ended — goal met" && isCreator(c) && !c.withdrawn;
+
+  const canRefund = (c) =>
+    campaignState(c) === "Ended — goal missed" && c.myContribution > 0n;
 
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", maxWidth: 720, margin: "2rem auto", padding: "0 1rem" }}>
@@ -148,26 +190,53 @@ export default function App() {
           </form>
 
           <h2>Campaigns</h2>
-          <button onClick={() => loadCampaigns(contract)} disabled={busy}>Refresh</button>
+          <button onClick={() => loadCampaigns(contract, account)} disabled={busy}>Refresh</button>
           {campaigns.length === 0 && <p>No campaigns yet.</p>}
-          {campaigns.map((c) => (
-            <article key={c.id} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "0.75rem 1rem", marginTop: "0.75rem" }}>
-              <h3 style={{ margin: "0 0 0.25rem" }}>#{c.id} — {c.title}</h3>
-              <p style={{ margin: "0.25rem 0" }}>
-                Goal: {fmtEth(c.goal)} ETH · Raised: {fmtEth(c.raised)} ETH<br />
-                Deadline: {fmtDate(c.deadline)} · Status: {campaignState(c)}<br />
-                Creator: <code>{c.creator}</code>
-              </p>
-              {campaignState(c) === "Live" && (
-                <span>
-                  <input placeholder="Amount (ETH)" type="number" step="any" min="0"
-                    value={amounts[c.id] || ""}
-                    onChange={(e) => setAmounts({ ...amounts, [c.id]: e.target.value })} />{" "}
-                  <button onClick={() => contribute(c.id)} disabled={busy}>Contribute</button>
-                </span>
-              )}
-            </article>
-          ))}
+          {campaigns.map((c) => {
+            const pct = progressPct(c.raised, c.goal);
+            return (
+              <article key={c.id} style={{ border: "1px solid #ccc", borderRadius: 6, padding: "0.75rem 1rem", marginTop: "0.75rem" }}>
+                <h3 style={{ margin: "0 0 0.25rem" }}>#{c.id} — {c.title}</h3>
+                <p style={{ margin: "0.25rem 0" }}>
+                  Goal: {fmtEth(c.goal)} ETH · Raised: {fmtEth(c.raised)} ETH ({pct.toFixed(1)}%)<br />
+                  Deadline: {fmtDate(c.deadline)} · {timeRemaining(c.deadline)} · Status: {campaignState(c)}<br />
+                  Creator: <code>{c.creator}</code>
+                  {isCreator(c) && <> (you)</>}
+                  {c.myContribution > 0n && (
+                    <><br />Your contribution: {fmtEth(c.myContribution)} ETH</>
+                  )}
+                </p>
+                <div
+                  role="progressbar"
+                  aria-valuenow={Math.round(pct)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`Funding progress for campaign ${c.id}`}
+                  style={{ background: "#e9ecef", borderRadius: 4, height: 8, overflow: "hidden", margin: "0.5rem 0" }}
+                >
+                  <div style={{ background: "#2f9e44", height: "100%", width: `${pct}%` }} />
+                </div>
+                {campaignState(c) === "Live" && (
+                  <span>
+                    <input placeholder="Amount (ETH)" type="number" step="any" min="0"
+                      value={amounts[c.id] || ""}
+                      onChange={(e) => setAmounts({ ...amounts, [c.id]: e.target.value })} />{" "}
+                    <button onClick={() => contribute(c.id)} disabled={busy}>Contribute</button>
+                  </span>
+                )}
+                {canWithdraw(c) && (
+                  <button onClick={() => withdraw(c.id)} disabled={busy}>
+                    Withdraw {fmtEth(c.raised)} ETH
+                  </button>
+                )}
+                {canRefund(c) && (
+                  <button onClick={() => claimRefund(c.id)} disabled={busy}>
+                    Claim refund ({fmtEth(c.myContribution)} ETH)
+                  </button>
+                )}
+              </article>
+            );
+          })}
         </>
       )}
     </main>
