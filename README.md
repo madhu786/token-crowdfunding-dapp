@@ -107,13 +107,19 @@ token-crowdfunding-dapp/
 └── README.md
 ```
 
+## Frontend
+
+The React + Vite demo in `frontend/` covers the full campaign lifecycle
+against a Sepolia deployment: wallet connect, campaign list with funding
+progress and time remaining, create / contribute, creator withdraw once an
+ended campaign meets its goal, and contributor refunds when it misses.
+See `frontend/README.md` for setup.
+
 ## Possible extensions
 
 - ERC-20 contributions instead of native ETH
 - Campaign categories and on-chain metadata (IPFS hash)
-- An indexer/subgraph for campaign discovery in the demo UI (the React +
-  Ethers.js frontend in `frontend/` already covers wallet connect and live
-  campaign states)
+- An indexer/subgraph for campaign discovery in the demo UI
 
 ## License
 
