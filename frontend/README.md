@@ -9,7 +9,12 @@ contribute ETH to a live campaign, withdraw as the creator once an ended
 campaign has met its goal, and claim a refund as a contributor when an
 ended campaign missed its goal. The withdraw / refund buttons only appear
 when the connected account is actually eligible, mirroring the contract's
-own checks.
+own checks. The create-campaign and contribute forms are validated
+client-side first (non-empty title, goal and amount greater than 0,
+duration greater than 0 days), so a bad value is a clear message instead
+of a reverted transaction; and when the wallet is on the wrong network
+the app offers a one-click "Switch to Sepolia" button
+(`wallet_switchEthereumChain`) instead of only a warning.
 
 ## Setup
 
