@@ -113,17 +113,67 @@ export default function App() {
     }
   };
 
+  // Validate before any transaction is built: the contract reverts on a
+  // zero goal (InvalidGoal) or zero duration (InvalidDeadline), and
+  // parseEther throws on malformed input — both used to reach the user as
+  // a failed transaction or an uncaught error instead of a clear message.
   const createCampaign = (e) => {
     e.preventDefault();
-    const goal = ethers.parseEther(goalEth || "0");
-    const durationSeconds = BigInt(Math.round(parseFloat(durationDays) * 86400));
-    runTx("Create campaign", () => contract.createCampaign(title, goal, durationSeconds));
+    if (!title.trim()) {
+      setStatus("Create campaign failed: enter a title.");
+      return;
+    }
+    let goal;
+    try {
+      goal = ethers.parseEther(goalEth);
+    } catch {
+      setStatus("Create campaign failed: goal must be a valid ETH amount.");
+      return;
+    }
+    if (goal <= 0n) {
+      setStatus("Create campaign failed: goal must be greater than 0 ETH.");
+      return;
+    }
+    const days = parseFloat(durationDays);
+    if (!Number.isFinite(days) || days <= 0) {
+      setStatus("Create campaign failed: duration must be greater than 0 days.");
+      return;
+    }
+    const durationSeconds = BigInt(Math.round(days * 86400));
+    if (durationSeconds === 0n) {
+      setStatus("Create campaign failed: duration must be greater than 0 days.");
+      return;
+    }
+    runTx("Create campaign", () => contract.createCampaign(title.trim(), goal, durationSeconds));
   };
 
-  const contribute = (id) =>
-    runTx(`Contribute to #${id}`, () =>
-      contract.contribute(id, { value: ethers.parseEther(amounts[id] || "0") })
-    );
+  // Ask MetaMask to switch to Sepolia instead of only telling the user
+  // the network is wrong; switching fires chainChanged, which reloads.
+  const switchToSepolia = async () => {
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: `0x${SEPOLIA_CHAIN_ID.toString(16)}` }],
+      });
+    } catch (err) {
+      setStatus(`Switch to Sepolia failed: ${err.shortMessage || err.message}`);
+    }
+  };
+
+  const contribute = (id) => {
+    let value;
+    try {
+      value = ethers.parseEther(amounts[id] || "");
+    } catch {
+      setStatus(`Contribute to #${id} failed: amount must be a valid ETH amount.`);
+      return;
+    }
+    if (value <= 0n) {
+      setStatus(`Contribute to #${id} failed: amount must be greater than 0 ETH.`);
+      return;
+    }
+    runTx(`Contribute to #${id}`, () => contract.contribute(id, { value }));
+  };
 
   const withdraw = (id) =>
     runTx(`Withdraw from #${id}`, () => contract.withdraw(id));
@@ -169,7 +219,10 @@ export default function App() {
           Connected: <code>{account}</code>
           {wrongNetwork && (
             <span style={{ color: "#b00020" }}>
-              {" "}— wrong network: switch MetaMask to Sepolia.
+              {" "}— wrong network:{" "}
+              <button onClick={switchToSepolia} disabled={busy}>
+                Switch to Sepolia
+              </button>
             </span>
           )}
         </p>
